@@ -4,7 +4,7 @@ info:
   description: A service for handling and analyzing large files.
   version: 0.1.0
 servers:
-  - url: https://n7zoqfeu6k.execute-api.us-east-1.amazonaws.com/v1
+  - url: http://localhost:3000/v1
     description: Main (dev) server
 security:
   - OpenID:
@@ -309,7 +309,7 @@ components:
   securitySchemes:
     OpenID:
       type: openIdConnect
-      openIdConnectUrl: https://n7zoqfeu6k.execute-api.us-east-1.amazonaws.com/v1/auth
+      openIdConnectUrl: http://localhost:3000/v1/auth
   responses:
     UnauthorizedError:
       description: Unauthorized
