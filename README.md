@@ -45,7 +45,13 @@ Make sure that user have these permissions:
 - AmazonAPIGatewayInvokeFullAccess
 - MyResourceGroupsFullAccess
 
-And you created and `Access keys` and added to `$HOME/.aws/credentials`
+Create an `Access keys` for the user and add it `$HOME/.aws/credentials`
+
+```
+[default]
+aws_access_key_id = <from-above>
+aws_secret_access_key = <from-above>
+```
 
 You should have something like this in `$HOME/.aws/config`
 ```
