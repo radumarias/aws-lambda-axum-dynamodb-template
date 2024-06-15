@@ -1,6 +1,6 @@
 # aws-lambda-axum-dynamodb
 
-Simple aws lambda with axum, DynamoDB, API Gateway, CloudWatch
+Simple aws lambda with axum, DynamoDB, API Gateway and CloudWatch
 
 # Install
 
