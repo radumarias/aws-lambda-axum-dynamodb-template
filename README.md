@@ -4,7 +4,7 @@ Simple aws lambda with axum, DynamoDB, API Gateway and CloudWatch
 
 # Install
 
-Crate a Policy `MyResourceGroupsFullAccess` with this
+In AWS IAM crate a Policy `MyResourceGroupsFullAccess` with this
 
 ```json
 {
