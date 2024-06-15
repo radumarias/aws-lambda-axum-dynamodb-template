@@ -1,0 +1,323 @@
+openapi: 3.0.1
+info:
+  title: File Cloud Analysis Service
+  description: A service for handling and analyzing large files.
+  version: 0.1.0
+servers:
+  - url: https://n7zoqfeu6k.execute-api.us-east-1.amazonaws.com/v1
+    description: Main (dev) server
+security:
+  - OpenID:
+      - file_read
+      - file_write
+
+paths:
+  /upload/{file_id}:
+    post:
+      summary: Request to upload a file
+      description: Request to upload a file based on UUID and will be provided with context on how to upload the file asynchronously
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The unique ID of the file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - hash
+              properties:
+                hash:
+                  type: string
+                  description: SHA-256 hash of the file contents
+                  pattern: '^[a-fA-F0-9]{64}$'  
+      responses:
+        '200':
+          description: Success response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                    example: URL to use to upload file in chunks.
+        '409':
+          description: Already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: UUID already exists
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /analysis/{file_id}:
+    get:
+      summary: Get analysis status
+      description: Retrieve the status of a file analysis by file ID.
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The unique ID of the file
+      responses:
+        '200':
+          description: Analysis status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: The current status of the analysis
+                    enum:
+                      - pending_upload
+                      - uploaded
+                      - upload_failed
+                      - processing
+                      - processed
+                      - processing_failed
+                  status_message:
+                    type: string
+                    description: Additional information about the status
+                  result_url:
+                    type: string
+                    description: URL to retrieve the analysis results, present if analysis is completed
+                    example: https://e09f3f6b-b78e-4611-9130-9d154bd32562.mock.pstmn.io/v1/results/{file_id}
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: File not found
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /results/{file_id}:
+    get:
+      summary: Get analysis status and results
+      description: Retrieve the status and results of a file analysis by file ID.
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The unique ID of the file
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number
+        - name: per_page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+          description: Number of results per page
+      responses:
+        '200':
+          description: Analysis status and results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: The current status and results of the analysis
+                    enum:
+                      - pending_upload
+                      - uploaded
+                      - upload_failed
+                      - processing
+                      - processed
+                      - processing_failed
+                  status_message:
+                    type: string
+                    description: Additional information about the status
+                  related_file_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                    description: List of related file IDs if analysis is completed
+        '404':
+          description: File not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: File not found
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /files/{file_id}:
+    get:
+      summary: Get files related to a specific file ID and date
+      description: Retrieve all files that contain a specific file ID and were uploaded after a given date, ordered by submission date.
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The unique ID of the file to query
+        - name: after_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: The date to filter files uploaded after
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number
+        - name: per_page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+          description: Number of results per page
+      responses:
+        '200':
+          description: List of related files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        file_id:
+                          type: string
+                          format: uuid
+                        upload_date:
+                          type: string
+                          format: date-time
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  
+  /path:
+    get:
+      summary: Get shortest path between two file IDs
+      description: Retrieve the shortest path of references between a source file ID and a destination file ID.
+      parameters:
+        - name: src
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The source file ID
+        - name: dst
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: The destination file ID
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number
+        - name: per_page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+          description: Number of results per page
+      responses:
+        '200':
+          description: Shortest path of references
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+                    description: The sequence of file IDs from source to destination
+        '202':
+          description: Accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Accepted for processing
+        '404':
+          description: Path not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: No path found between the given file IDs
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    OpenID:
+      type: openIdConnect
+      openIdConnectUrl: https://n7zoqfeu6k.execute-api.us-east-1.amazonaws.com/v1/auth
+  responses:
+    UnauthorizedError:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: Authentication credentials were missing or incorrect.
