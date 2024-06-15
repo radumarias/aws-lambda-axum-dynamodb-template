@@ -1,2 +1,2 @@
 # aws-lamda-axum-dynamodb
-Simple aws lambda with axum and DynamoDB
+Simple aws lambda with axum, DynamoDB, API Gateway, CloudWatch
