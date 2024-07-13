@@ -1,29 +1,36 @@
+use anyhow::Result;
 use async_injector::{Injector, Provider};
-use axum::{extract::State, routing::get, Router};
-use lambda_http::{run, Error};
-use lambda_web::is_running_on_lambda;
-use std::{str::FromStr, time::SystemTime};
-
+use axum::{extract::State, Router, routing::get};
 use axum::{
     extract::{Path, Query},
-    routing::post,
     Json,
+    routing::post,
 };
-
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
+use sqlx::{FromRow, PgPool, Postgres};
+use sqlx::migrate::Migrator;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
+use tracing::info;
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use uuid::Uuid;
-use aws_sdk_dynamodb::Client;
-use aws_config;
-use aws_sdk_dynamodb::types::AttributeValue;
 
 const TABLE: &str = "rust-test";
+
+#[derive(Serialize, FromRow)]
+struct RustTest {
+    uuid: Uuid,
+    hash: String,
+    created_at: DateTime<Utc>,
+}
 
 #[derive(Debug, Provider)]
 struct Repository {
     #[dependency]
-    client: Client,
+    client: sqlx::Pool<Postgres>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,7 +55,7 @@ struct FilesResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct File {
-    file_id: String,
+    file_id: Uuid,
     upload_date: DateTime<Utc>,
     hash: String,
 }
@@ -88,7 +95,7 @@ async fn post_upload(
     State(injector): State<&'static Injector>,
     Path(file_id): Path<Uuid>,
     Json(payload): Json<UploadRequest>,
-) -> Json<UploadResponse> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let client = Repository::provider(&injector)
         .await
         .unwrap()
@@ -96,59 +103,48 @@ async fn post_upload(
         .await
         .client;
 
-    let uuid_av = AttributeValue::S(file_id.to_string());
-    let created_at_av = AttributeValue::N(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs().to_string());
-    let hash_av = AttributeValue::S(payload.hash);
+    let query = format!(
+        r#"
+        INSERT INTO {} (uuid, hash)
+        VALUES ($1, $2)
+        "#,
+        TABLE
+    );
+    sqlx::query(&query)
+        .bind(file_id)
+        .bind(payload.hash)
+        .execute(&client)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let request = client
-        .put_item()
-        .table_name(TABLE)
-        .item("uuid", uuid_av)
-        .item("created_at", created_at_av)
-        .item("hash", hash_av);
-
-    println!("Executing request [{request:?}] to add item...");
-
-    let resp = request.send().await.unwrap();
-
-    // let attributes = resp.attributes().unwrap();
-    //
-    // let uuid = attributes.get("uuid").cloned();
-    // let created_at = attributes.get("created_at").cloned();
-    // let hash = attributes.get("hash").cloned();
-    //
-    // println!(
-    //     "Added file {uuid:?}, {created_at:?}, {hash:?}"
-    // );
-
-    Json(UploadResponse {
+    Ok(Json(UploadResponse {
         upload_url: "https://example.com/upload/42".to_string(),
-    })
+    }))
 }
 
 async fn get_analysis(
     State(injector): State<&'static Injector>,
     Path(file_id): Path<Uuid>,
-) -> Json<AnalysisResponse> {
-    let client = Repository::provider(&injector)
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let _client = Repository::provider(&injector)
         .await
         .unwrap()
         .wait()
         .await
         .client;
 
-    Json(AnalysisResponse {
+    Ok(Json(AnalysisResponse {
         status: "processing".to_string(),
         status_message: "".to_string(),
         result_url: format!("https://ll09yudnr6.execute-api.us-east-1.amazonaws.com/v1/results/{file_id}"),
-    })
+    }))
 }
 
 async fn get_results(
     State(injector): State<&'static Injector>,
     Path(_file_id): Path<Uuid>,
     pagination: Query<PaginationQuery>,
-) -> Json<AnalysisResultResponse> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let client = Repository::provider(&injector)
         .await
         .unwrap()
@@ -157,25 +153,23 @@ async fn get_results(
         .client;
 
     let page_size = pagination.per_page;
-    let items: Result<Vec<_>, _> = client
-        .scan()
-        .table_name(TABLE)
-        .limit(page_size as i32)
-        .into_paginator()
-        .items()
-        .send()
-        .collect()
-        .await;
+    let items: Vec<RustTest> = sqlx::query_as(r#"SELECT uuid, created_at, hash
+        FROM rust_test
+        LIMIT $1"#)
+        .bind(page_size as i64)
+        .fetch_all(&client)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let ids = items.unwrap().iter()
-        .map(|item| Uuid::from_str(item.get("uuid").unwrap().as_s().unwrap()).unwrap())
+    let ids = items.iter()
+        .map(|item| item.uuid)
         .collect::<Vec<_>>();
 
-    Json(AnalysisResultResponse {
+    Ok(Json(AnalysisResultResponse {
         status: "processed".to_string(),
         status_message: "".to_string(),
         related_file_ids: ids,
-    })
+    }))
 }
 
 async fn get_files(
@@ -183,7 +177,7 @@ async fn get_files(
     Path(_file_id): Path<Uuid>,
     _after_date: Query<AfterDateQuery>,
     pagination: Query<PaginationQuery>,
-) -> Json<FilesResponse> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let client = Repository::provider(&injector)
         .await
         .unwrap()
@@ -192,35 +186,38 @@ async fn get_files(
         .client;
 
     let page_size = pagination.per_page;
-    let items: Result<Vec<_>, _> = client
-        .scan()
-        .table_name(TABLE)
-        .limit(page_size as i32)
-        .into_paginator()
-        .items()
-        .send()
-        .collect()
-        .await;
+    let items: Vec<RustTest> = sqlx::query_as!(
+        RustTest,
+        r#"
+        SELECT uuid, created_at, hash
+        FROM rust_test
+        LIMIT $1
+        "#,
+        page_size as i32
+    )
+        .fetch_all(&client)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let files = items.unwrap().iter().map(|item| {
-        let uuid = item.get("uuid").unwrap().as_s().unwrap().to_string();
-        let created_at = item.get("created_at").unwrap().as_n().unwrap().parse::<u64>().unwrap();
-        let hash = item.get("hash").unwrap().as_s().unwrap().to_string();
+    let files = items.iter().map(|item| {
+        let uuid = item.uuid;
+        let created_at = item.created_at;
+        let hash = item.hash.clone();
         File {
             file_id: uuid,
-            upload_date: DateTime::<Utc>::from_timestamp_nanos(created_at as i64 * 1_000_000_000),
+            upload_date: created_at,
             hash,
         }
     }).collect::<Vec<_>>();
 
-    Json(FilesResponse { files })
+    Ok(Json(FilesResponse { files }))
 }
 
 async fn get_path(
     State(injector): State<&'static Injector>,
     ids: Query<IdsSrcDstQuery>,
-    pagination: Query<PaginationQuery>,
-) -> Json<PathResponse> {
+    _pagination: Query<PaginationQuery>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     let client = Repository::provider(&injector)
         .await
         .unwrap()
@@ -228,51 +225,57 @@ async fn get_path(
         .await
         .client;
 
-    let ids = match client
-        .execute_statement()
-        .statement(format!(
-            r#"SELECT uuid FROM "{TABLE}" WHERE uuid IN [?, ?]"#
-        ))
-        .set_parameters(Some(vec![
-            AttributeValue::S(ids.src.to_string()),
-            AttributeValue::S(ids.dst.to_string()),
-        ]))
-        .send()
-        .await
-    {
-        Ok(resp) => {
-            if !resp.items().is_empty() {
-                println!("Found {} matching entry in the table", resp.items.as_ref().unwrap().len());
-                resp.items.unwrap().iter()
-                    .map(|item| Uuid::from_str(item.get("uuid").unwrap().as_s().unwrap()).unwrap())
-                    .collect()
-            } else {
-                println!("Did not find a match.");
-                vec![]
-            }
-        }
-        Err(e) => {
-            println!("Got an error querying table:");
-            println!("{}", e);
-            panic!("Error querying table.");
-        }
-    };
+    let ids_src: Uuid = ids.src;
+    let ids_dst: Uuid = ids.dst;
 
-    Json(PathResponse {
+    let ids: Vec<Uuid> = sqlx::query!(
+        r#"
+        SELECT uuid
+        FROM rust_test
+        WHERE uuid IN ($1, $2)
+        "#,
+        ids_src,
+        ids_dst
+    )
+        .fetch_all(&client)
+        .await
+        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+        .iter()
+        .map(|row| row.uuid)
+        .collect();
+
+    Ok(Json(PathResponse {
         path: ids,
-    })
+    }))
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    let config = aws_config::load_from_env().await;
-    let client = Client::new(&config);
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+
+#[shuttle_runtime::main]
+async fn axum(#[shuttle_shared_db::Postgres] database_url: String) -> shuttle_axum::ShuttleAxum {
+    // Create the database connection pool
+    let pool = PgPool::connect(&database_url).await
+        .map_err(|err| {
+            println!("Failed to create pool: {:?}", err);
+            shuttle_runtime::Error::Custom(err.into())
+        })?;
+
+    // Run migrations
+    MIGRATOR.run(&pool).await
+        .map_err(|err| {
+            println!("Failed to run migrations: {:?}", err);
+            shuttle_runtime::Error::Custom(err.into())
+        })?;
+
+    let client = sqlx::Pool::<Postgres>::connect(&database_url).await.unwrap();
 
     let injector = Injector::new();
     injector.update(client).await;
 
     // let init_provider = InitProvider(provider);
     let injector: &'static Injector = Box::leak(Box::new(injector));
+
+    println!("Starting server...");
 
     // build our application with a route
     let app = Router::new()
@@ -281,17 +284,11 @@ async fn main() -> Result<(), Error> {
         .route("/v1/results/:file_id", get(get_results))
         .route("/v1/files/:file_id", get(get_files))
         .route("/v1/path", get(get_path))
+        .layer(
+            ServiceBuilder::new()
+                .layer(TraceLayer::new_for_http())
+        )
         .with_state(injector);
 
-    if is_running_on_lambda() {
-        // Run app on AWS Lambda
-        run(app).await?;
-        // run_hyper_on_lambda(app).await?;
-    } else {
-        // Run app on local server
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-        axum::serve(listener, app).await.unwrap();
-    }
-    Ok(())
+    Ok(app.into())
 }
-
