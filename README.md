@@ -18,6 +18,8 @@ Open [http://127.0.0.1:8000/v1/results/550e8400-e29b-41d4-a716-446655440000?page
 
 # Deploy
 
+Create the project [here](https://console.shuttle.rs), make sure the name matches the name in `Cargo.toml`.
+
 ```bash
 cargo shuttle deploy
 ```
