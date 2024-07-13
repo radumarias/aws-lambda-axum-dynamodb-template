@@ -119,3 +119,7 @@ SAM configuration environment [default]:
 - select your app with the name you gave at deploy
 - in the lef menu select `API: <name-of-your-app>(something)`
 - in the `Stages` section you have the `Invoke URL`, use that to make API calls
+
+# Migrating to shuttle.rs
+
+You can see how this project was migrated to [shuttle.rs](https://shuttle.rs) [here](https://github.com/radumarias/aws-lambda-axum-dynamodb/tree/shuttle)
