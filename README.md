@@ -122,4 +122,4 @@ SAM configuration environment [default]:
 
 # Migrating to shuttle.rs
 
-You can see how this project was migrated to [shuttle.rs](https://shuttle.rs) [here](https://github.com/radumarias/aws-lambda-axum-dynamodb/tree/shuttle)
+You can see here how this project was [migrated](https://github.com/radumarias/aws-lambda-axum-dynamodb/tree/shuttle) to [shuttle.rs](https://shuttle.rs).
