@@ -1,6 +1,6 @@
 # aws-lambda-axum-dynamodb
 
-Sample app with `Aws Lambda`, `axum`, `DynamoDB`, `API Gateway` and `CloudWatch`.
+Template app with `Aws Lambda`, `axum`, `DynamoDB`, `API Gateway` and `CloudWatch`.
 
 # Install
 
