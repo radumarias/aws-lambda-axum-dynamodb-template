@@ -1,21 +1,19 @@
 use anyhow::Result;
 use async_injector::{Injector, Provider};
-use axum::{extract::State, Router, routing::get};
-use axum::{
-    extract::{Path, Query},
-    Json,
-    routing::post,
-};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use axum::{extract::State, routing::get, Router};
+use axum::{
+    extract::{Path, Query},
+    routing::post,
+    Json,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, PgPool, Postgres};
 use sqlx::migrate::Migrator;
+use sqlx::{FromRow, PgPool, Postgres};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
-use tracing::info;
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use uuid::Uuid;
 
 const TABLE: &str = "rust-test";
@@ -45,7 +43,7 @@ struct UploadResponse {
 
 #[derive(Debug, Deserialize)]
 struct AfterDateQuery {
-    after_date: DateTime<Utc>,
+    _after_date: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +85,7 @@ struct PathResponse {
 
 #[derive(Debug, Deserialize)]
 struct PaginationQuery {
-    page: u64,
+    _page: u64,
     per_page: usize,
 }
 
@@ -136,7 +134,9 @@ async fn get_analysis(
     Ok(Json(AnalysisResponse {
         status: "processing".to_string(),
         status_message: "".to_string(),
-        result_url: format!("https://ll09yudnr6.execute-api.us-east-1.amazonaws.com/v1/results/{file_id}"),
+        result_url: format!(
+            "https://ll09yudnr6.execute-api.us-east-1.amazonaws.com/v1/results/{file_id}"
+        ),
     }))
 }
 
@@ -153,17 +153,17 @@ async fn get_results(
         .client;
 
     let page_size = pagination.per_page;
-    let items: Vec<RustTest> = sqlx::query_as(r#"SELECT uuid, created_at, hash
+    let items: Vec<RustTest> = sqlx::query_as(
+        r#"SELECT uuid, created_at, hash
         FROM rust_test
-        LIMIT $1"#)
-        .bind(page_size as i64)
-        .fetch_all(&client)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+        LIMIT $1"#,
+    )
+    .bind(page_size as i64)
+    .fetch_all(&client)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let ids = items.iter()
-        .map(|item| item.uuid)
-        .collect::<Vec<_>>();
+    let ids = items.iter().map(|item| item.uuid).collect::<Vec<_>>();
 
     Ok(Json(AnalysisResultResponse {
         status: "processed".to_string(),
@@ -195,20 +195,23 @@ async fn get_files(
         "#,
         page_size as i32
     )
-        .fetch_all(&client)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    .fetch_all(&client)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
 
-    let files = items.iter().map(|item| {
-        let uuid = item.uuid;
-        let created_at = item.created_at;
-        let hash = item.hash.clone();
-        File {
-            file_id: uuid,
-            upload_date: created_at,
-            hash,
-        }
-    }).collect::<Vec<_>>();
+    let files = items
+        .iter()
+        .map(|item| {
+            let uuid = item.uuid;
+            let created_at = item.created_at;
+            let hash = item.hash.clone();
+            File {
+                file_id: uuid,
+                upload_date: created_at,
+                hash,
+            }
+        })
+        .collect::<Vec<_>>();
 
     Ok(Json(FilesResponse { files }))
 }
@@ -237,16 +240,14 @@ async fn get_path(
         ids_src,
         ids_dst
     )
-        .fetch_all(&client)
-        .await
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
-        .iter()
-        .map(|row| row.uuid)
-        .collect();
+    .fetch_all(&client)
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?
+    .iter()
+    .map(|row| row.uuid)
+    .collect();
 
-    Ok(Json(PathResponse {
-        path: ids,
-    }))
+    Ok(Json(PathResponse { path: ids }))
 }
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -254,20 +255,20 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 #[shuttle_runtime::main]
 async fn axum(#[shuttle_shared_db::Postgres] database_url: String) -> shuttle_axum::ShuttleAxum {
     // Create the database connection pool
-    let pool = PgPool::connect(&database_url).await
-        .map_err(|err| {
-            println!("Failed to create pool: {:?}", err);
-            shuttle_runtime::Error::Custom(err.into())
-        })?;
+    let pool = PgPool::connect(&database_url).await.map_err(|err| {
+        println!("Failed to create pool: {:?}", err);
+        shuttle_runtime::Error::Custom(err.into())
+    })?;
 
     // Run migrations
-    MIGRATOR.run(&pool).await
-        .map_err(|err| {
-            println!("Failed to run migrations: {:?}", err);
-            shuttle_runtime::Error::Custom(err.into())
-        })?;
+    MIGRATOR.run(&pool).await.map_err(|err| {
+        println!("Failed to run migrations: {:?}", err);
+        shuttle_runtime::Error::Custom(err.into())
+    })?;
 
-    let client = sqlx::Pool::<Postgres>::connect(&database_url).await.unwrap();
+    let client = sqlx::Pool::<Postgres>::connect(&database_url)
+        .await
+        .unwrap();
 
     let injector = Injector::new();
     injector.update(client).await;
@@ -284,10 +285,7 @@ async fn axum(#[shuttle_shared_db::Postgres] database_url: String) -> shuttle_ax
         .route("/v1/results/:file_id", get(get_results))
         .route("/v1/files/:file_id", get(get_files))
         .route("/v1/path", get(get_path))
-        .layer(
-            ServiceBuilder::new()
-                .layer(TraceLayer::new_for_http())
-        )
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
         .with_state(injector);
 
     Ok(app.into())
