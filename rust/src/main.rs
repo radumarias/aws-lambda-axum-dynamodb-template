@@ -10,13 +10,13 @@ use axum::{
     Json,
 };
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
-use uuid::Uuid;
-use aws_sdk_dynamodb::Client;
 use aws_config;
 use aws_sdk_dynamodb::types::AttributeValue;
+use aws_sdk_dynamodb::Client;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 const TABLE: &str = "rust-test";
 
@@ -97,7 +97,13 @@ async fn post_upload(
         .client;
 
     let uuid_av = AttributeValue::S(file_id.to_string());
-    let created_at_av = AttributeValue::N(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs().to_string());
+    let created_at_av = AttributeValue::N(
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_string(),
+    );
     let hash_av = AttributeValue::S(payload.hash);
 
     let request = client
@@ -140,7 +146,9 @@ async fn get_analysis(
     Json(AnalysisResponse {
         status: "processing".to_string(),
         status_message: "".to_string(),
-        result_url: format!("https://ll09yudnr6.execute-api.us-east-1.amazonaws.com/v1/results/{file_id}"),
+        result_url: format!(
+            "https://ll09yudnr6.execute-api.us-east-1.amazonaws.com/v1/results/{file_id}"
+        ),
     })
 }
 
@@ -167,7 +175,9 @@ async fn get_results(
         .collect()
         .await;
 
-    let ids = items.unwrap().iter()
+    let ids = items
+        .unwrap()
+        .iter()
         .map(|item| Uuid::from_str(item.get("uuid").unwrap().as_s().unwrap()).unwrap())
         .collect::<Vec<_>>();
 
@@ -202,16 +212,28 @@ async fn get_files(
         .collect()
         .await;
 
-    let files = items.unwrap().iter().map(|item| {
-        let uuid = item.get("uuid").unwrap().as_s().unwrap().to_string();
-        let created_at = item.get("created_at").unwrap().as_n().unwrap().parse::<u64>().unwrap();
-        let hash = item.get("hash").unwrap().as_s().unwrap().to_string();
-        File {
-            file_id: uuid,
-            upload_date: DateTime::<Utc>::from_timestamp_nanos(created_at as i64 * 1_000_000_000),
-            hash,
-        }
-    }).collect::<Vec<_>>();
+    let files = items
+        .unwrap()
+        .iter()
+        .map(|item| {
+            let uuid = item.get("uuid").unwrap().as_s().unwrap().to_string();
+            let created_at = item
+                .get("created_at")
+                .unwrap()
+                .as_n()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap();
+            let hash = item.get("hash").unwrap().as_s().unwrap().to_string();
+            File {
+                file_id: uuid,
+                upload_date: DateTime::<Utc>::from_timestamp_nanos(
+                    created_at as i64 * 1_000_000_000,
+                ),
+                hash,
+            }
+        })
+        .collect::<Vec<_>>();
 
     Json(FilesResponse { files })
 }
@@ -242,8 +264,13 @@ async fn get_path(
     {
         Ok(resp) => {
             if !resp.items().is_empty() {
-                println!("Found {} matching entry in the table", resp.items.as_ref().unwrap().len());
-                resp.items.unwrap().iter()
+                println!(
+                    "Found {} matching entry in the table",
+                    resp.items.as_ref().unwrap().len()
+                );
+                resp.items
+                    .unwrap()
+                    .iter()
                     .map(|item| Uuid::from_str(item.get("uuid").unwrap().as_s().unwrap()).unwrap())
                     .collect()
             } else {
@@ -258,9 +285,7 @@ async fn get_path(
         }
     };
 
-    Json(PathResponse {
-        path: ids,
-    })
+    Json(PathResponse { path: ids })
 }
 
 #[tokio::main]
@@ -294,4 +319,3 @@ async fn main() -> Result<(), Error> {
     }
     Ok(())
 }
-
