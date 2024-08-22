@@ -36,8 +36,8 @@ jobs:
         with:
           path: |
             ~/.cargo
-            target
-          key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ hashFiles('**.toml', '**.lock') }}-${{ github.ref }}
+            rust/target
+          key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ hashFiles('rust/**.toml', 'rust/**.lock') }}-${{ github.ref }}
           
       - name: build
         run: |
