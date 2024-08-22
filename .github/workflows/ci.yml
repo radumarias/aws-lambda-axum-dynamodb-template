@@ -41,14 +41,21 @@ jobs:
           rustup update
         shell: bash
 
+      - name: Get Rust version hash
+        id: rust_version_hash
+        run: |
+          rust_version=$(rustc --version | awk '{print $2}')
+          rust_version_hash=$(echo -n $rust_version | sha256sum | awk '{print $1}')
+          echo "::set-output name=hash::$rust_version_hash"
+
       - name: build cache
         id: build-cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo
-            rust/target/debug/deps/**
-          key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ hashFiles('rust/**.toml', 'rust/**.lock') }}-${{ github.ref }}
+            rust/target
+          key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ steps.rust_version_hash.outputs.hash }}-${{ github.ref }}
           
       - name: build
         run: |
