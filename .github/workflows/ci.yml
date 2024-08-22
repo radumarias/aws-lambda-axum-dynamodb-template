@@ -41,11 +41,12 @@ jobs:
           rustup update
         shell: bash
 
-      - name: Get Rust version hash
-        id: rust_version_hash
+      - name: Get Rust version hash (Linux & macOS)
+        if: runner.os != 'Windows'
+        id: rust_version_hash_unix
         run: |
           rust_version=$(rustc --version | awk '{print $2}')
-          rust_version_hash=$(echo -n $rust_version | sha256sum | awk '{print $1}')
+          rust_version_hash=$(echo -n $rust_version | shasum -a 256 | awk '{print $1}')
           echo "{hash}={$rust_version_hash}" >> $GITHUB_OUTPUT
         shell: bash
 
