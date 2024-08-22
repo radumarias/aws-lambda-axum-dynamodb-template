@@ -30,7 +30,7 @@ jobs:
       - name: setup Rust
         run: rustup update
 
-      - name: build Cache
+      - name: build cache
         id: build-cache
         uses: actions/cache@v4
         with:
