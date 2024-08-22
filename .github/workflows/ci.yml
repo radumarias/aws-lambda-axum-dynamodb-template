@@ -30,7 +30,6 @@ jobs:
 
       - name: setup Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -y
           rustup install nightly
           rustup default nightly
           rustup update
