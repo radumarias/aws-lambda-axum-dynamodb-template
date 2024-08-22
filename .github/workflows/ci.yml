@@ -36,7 +36,7 @@ jobs:
         with:
           path: |
             ~/.cargo
-            rust/target
+            rust/target/debug/deps
           key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ hashFiles('rust/**.toml', 'rust/**.lock') }}-${{ github.ref }}
           
       - name: build
