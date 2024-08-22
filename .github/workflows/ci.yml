@@ -53,7 +53,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo
+            ~/.cargo/**
             rust/target
           key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ steps.rust_version_hash.outputs.hash }}-${{ github.ref }}
           
