@@ -41,24 +41,26 @@ jobs:
           rustup update
         shell: bash
 
-      - name: Get Rust version hash (Linux & macOS)
-        if: runner.os != 'Windows'
-        id: rust_version_hash_unix
-        run: |
-          rust_version=$(rustc --version | awk '{print $2}')
-          rust_version_hash=$(echo -n $rust_version | shasum -a 256 | awk '{print $1}')
-          echo "{hash}={$rust_version_hash}" >> $GITHUB_OUTPUT
-        shell: bash
+      # - name: Get Rust version hash (Linux & macOS)
+      #   if: runner.os != 'Windows'
+      #   id: rust_version_hash_unix
+      #   run: |
+      #     rust_version=$(rustc --version | awk '{print $2}')
+      #     rust_version_hash=$(echo -n $rust_version | shasum -a 256 | awk '{print $1}')
+      #     echo "{hash}={$rust_version_hash}" >> $GITHUB_OUTPUT
+      #   shell: bash
 
-      - name: build cache
-        id: build-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo
-            rust/target
-          key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ steps.rust_version_hash.outputs.hash }}-${{ github.ref }}
-          
+      # - name: build cache
+      #   id: build-cache
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: |
+      #       ~/.cargo
+      #       rust/target
+      #     key: build-cache-${{ runner.os }}-${{ github.workflow }}-${{ steps.rust_version_hash.outputs.hash }}-${{ github.ref }}
+
+      - uses: Swatinem/rust-cache@v1
+      
       - name: build
         run: |
           cd rust
